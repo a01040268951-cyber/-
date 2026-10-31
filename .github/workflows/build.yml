@@ -58,8 +58,7 @@ jobs:
           set -e
           mkdir -p /tmp/st && cd /tmp/st
           curl -sSfL -o whisper-jni.jar https://repo1.maven.org/maven2/io/github/givimad/whisper-jni/1.7.1/whisper-jni-1.7.1.jar
-          echo "--- natives"; unzip -l whisper-jni.jar | grep -E "\.(so|dll|dylib)" | tee -a $GITHUB_WORKSPACE/smoke.log || true
-          for m in base-q5_1 small-q5_1; do
+          for m in small-q5_1 medium-q5_0 large-v3-turbo-q5_0; do
             curl -sSfL -o ggml-$m.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$m.bin
           done
           ls -la *.bin | tee -a $GITHUB_WORKSPACE/smoke.log
@@ -69,7 +68,10 @@ jobs:
           while IFS= read -r line; do
             i=$((i+1)); gtts-cli "$line" -l ko -o s$i.mp3 </dev/null
             ffmpeg -nostdin -loglevel error -y -i s$i.mp3 -ar 16000 -ac 1 -sample_fmt s16 s$i.wav
-            echo "s$i.wav = $line" >> $GITHUB_WORKSPACE/smoke.log; files="$files s$i.wav"
+            # 마이크처럼: 소리 작게 + 잡음
+            ffmpeg -nostdin -loglevel error -y -i s$i.wav -f lavfi -i "anoisesrc=c=pink:a=0.05" \
+              -filter_complex "[0]volume=0.3[a];[a][1]amix=inputs=2:duration=first:normalize=0" -ar 16000 -ac 1 -sample_fmt s16 s${i}_n.wav
+            echo "s$i.wav = $line" >> $GITHUB_WORKSPACE/smoke.log; files="$files s$i.wav s${i}_n.wav"
           done <<'EOS'
           안녕하세요 반갑습니다
           감사합니다
@@ -81,15 +83,23 @@ jobs:
           나 지금 집에 가
           다이아 캐러 가자
           아 진짜 미치겠다
+          저기 크리퍼 터진다 빨리 피해
+          철 좀 나눠 줘
+          내가 먼저 갈게
+          집 짓자 나무 캐 와
+          배고파 빵 먹자
+          그거 내 거야
           EOS
-          ffmpeg -nostdin -loglevel error -y -f lavfi -i "anoisesrc=d=4:c=pink:a=0.03" -ar 16000 -ac 1 -sample_fmt s16 noise.wav
-          echo "noise.wav = (잡음 4초, 말 없음)" >> $GITHUB_WORKSPACE/smoke.log
+          ffmpeg -nostdin -loglevel error -y -f lavfi -i "anoisesrc=d=4:c=pink:a=0.05" -ar 16000 -ac 1 -sample_fmt s16 noise.wav
+          echo "noise.wav = " >> $GITHUB_WORKSPACE/smoke.log
           echo "nproc=$(nproc)" >> $GITHUB_WORKSPACE/smoke.log
-          for cfg in small-q5_1:tight base-q5_1:tight; do
-            m=${cfg%%:*}; ctx=${cfg##*:}; echo "=== $m ctx=$ctx" | tee -a $GITHUB_WORKSPACE/smoke.log
-            java -Dtabooword.ctx=$ctx -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
-              "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 3 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" | tee -a $GITHUB_WORKSPACE/smoke.log
+          P="마인크래프트 하면서 친구들과 나누는 대화."
+          for cfg in "small-q5_1|" "small-q5_1|$P" "medium-q5_0|" "large-v3-turbo-q5_0|"; do
+            m=${cfg%%|*}; prompt=${cfg#*|}; echo "=== $m prompt=[${prompt}]" | tee -a $GITHUB_WORKSPACE/smoke.log
+            java -Dtabooword.prompt="$prompt" -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
+              "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 3 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" >> $GITHUB_WORKSPACE/smoke.log
           done
+          python3 $GITHUB_WORKSPACE/tools/summarize.py $GITHUB_WORKSPACE/smoke.log | tee $GITHUB_WORKSPACE/summary.txt
 
       # 결과물을 taboo-mod-dist 브랜치에 커밋 (아티팩트 대신 git으로 받기 위함)
       - name: Publish jar to dist branch
@@ -97,6 +107,7 @@ jobs:
         run: |
           mkdir -p /tmp/dist && cp build/libs/*.jar /tmp/dist/
           [ -f smoke.log ] && cp smoke.log /tmp/dist/ || echo "no smoke log" > /tmp/dist/smoke.log
+          [ -f summary.txt ] && cp summary.txt /tmp/dist/ || true
           unzip -l build/libs/*.jar > /tmp/dist/jar-contents.txt
           cd /tmp/dist
           git init -q -b taboo-mod-dist

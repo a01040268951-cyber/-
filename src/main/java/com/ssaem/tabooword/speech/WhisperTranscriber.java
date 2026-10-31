@@ -43,6 +43,8 @@ public final class WhisperTranscriber implements SpeechPipeline.Transcriber, Aut
         params.noContext = true;
         params.singleSegment = true;
         params.temperatureInc = 0f; // 다시 시도하지 않음 (속도)
+        String prompt = System.getProperty("tabooword.prompt", PROMPT);
+        params.initialPrompt = prompt.isEmpty() ? null : prompt;
     }
 
     @Override
@@ -66,6 +68,9 @@ public final class WhisperTranscriber implements SpeechPipeline.Transcriber, Aut
     public void close() {
         whisper.free(context);
     }
+
+    /** 한국어 일상 대화라는 힌트 (맞춤법·띄어쓰기·게임 단어 인식에 도움) */
+    static final String PROMPT = "";
 
     /** 테스트에서 비교용: -Dtabooword.ctx=tight|mid|full */
     static final String CTX_MODE = System.getProperty("tabooword.ctx", "tight");

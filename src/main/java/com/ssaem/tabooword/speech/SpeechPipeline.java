@@ -23,11 +23,11 @@ public final class SpeechPipeline {
 
     private static final int FRAME = 480;                 // 30ms
     private static final int START_FRAMES = 3;            // 90ms 이상 소리 → 말 시작
-    private static final int END_FRAMES = 22;             // 660ms 조용 → 말 끝
+    private static final int END_FRAMES = 15;             // 450ms 조용 → 말 끝
     private static final int PREROLL = RATE * 3 / 10;     // 말 시작 전 0.3초도 포함
     private static final int MAX_UTTER = RATE * 12;       // 한 번에 최대 12초
-    private static final int INTERIM_EVERY = RATE;        // 1초마다 중간 인식
-    private static final int MIN_INTERIM = RATE * 7 / 10; // 0.7초 이상 말해야 중간 인식
+    private static final int INTERIM_EVERY = RATE * 6 / 10; // 0.6초마다 중간 인식 (PC가 느리면 자동으로 늘어남)
+    private static final int MIN_INTERIM = RATE / 2;      // 0.5초 이상 말하면 중간 인식 시작
     private static final int MIN_INPUT = RATE * 11 / 10;  // whisper는 1초 미만 입력을 거부 → 0으로 채움
     private static final float MIN_RMS = 0.012f;          // 절대 최소 음량
 
@@ -129,7 +129,18 @@ public final class SpeechPipeline {
     private void emit(boolean isFinal) {
         int n = Math.max(utterLen, MIN_INPUT);
         float[] input = new float[n]; // 1초 미만이면 뒤를 0(무음)으로 채움
-        System.arraycopy(utter, 0, input, 0, utterLen);
+        // 마이크 소리가 작으면 키운다 (최대 8배, 최고점 0.9)
+        float peak = 0f;
+        for (int i = 0; i < utterLen; i++) {
+            peak = Math.max(peak, Math.abs(utter[i]));
+        }
+        float gain = peak > 0f ? Math.min(8f, 0.9f / peak) : 1f;
+        if (gain < 1f) {
+            gain = 1f;
+        }
+        for (int i = 0; i < utterLen; i++) {
+            input[i] = utter[i] * gain;
+        }
         long start = System.nanoTime();
         String text = HallucinationFilter.clean(transcriber.transcribe(input, n));
         // 인식이 느린 PC에서는 중간 인식 간격을 늘려서 밀리지 않게 한다
