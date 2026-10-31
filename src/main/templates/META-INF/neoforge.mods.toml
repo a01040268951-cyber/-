@@ -6,10 +6,10 @@ version="${mod_version}"
 displayName="금기어 (${mod_name})"
 logoFile="tabooword.png"
 authors="쎔 (Ssaem)"
-credits="Speech recognition: Vosk (Apache 2.0)"
+credits="Speech recognition: whisper.cpp / OpenAI Whisper (MIT), whisper-jni (Apache 2.0)"
 description='''
 마이크로 금지된 한글 자모(기본: ㅇ)가 들어간 말을 하면 그 자리에서 죽습니다.
-"안녕", "오케이" 전부 아웃. 오프라인 한국어 음성 인식(Vosk) 사용, 첫 실행 시 모델 약 87MB 자동 다운로드.
+"안녕", "오케이" 전부 아웃. 오프라인 한국어 음성 인식(Whisper) 사용, 첫 실행 시 모델 약 190MB 자동 다운로드.
 /taboo 명령어로 켜기·끄기, 금지 자모 추가·제거.
 
 Say anything containing a banned Hangul letter (default: ㅇ) into your mic and you die instantly.

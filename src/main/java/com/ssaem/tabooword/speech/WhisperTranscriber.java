@@ -68,7 +68,7 @@ public final class WhisperTranscriber implements SpeechPipeline.Transcriber, Aut
     }
 
     /** 테스트에서 비교용: -Dtabooword.ctx=tight|mid|full */
-    static final String CTX_MODE = System.getProperty("tabooword.ctx", "mid");
+    static final String CTX_MODE = System.getProperty("tabooword.ctx", "tight");
 
     static int audioCtx(int count) {
         int need = (int) Math.ceil(count / 16000.0 * 50);
