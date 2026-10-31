@@ -21,7 +21,6 @@ import com.ssaem.tabooword.TabooStatus;
 import com.ssaem.tabooword.TabooWord;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
@@ -182,7 +181,7 @@ final class VoiceListener implements Runnable {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
             if (mc.player != null) {
-                mc.gui.hud.getChat().addPlayerMessage(Component.literal("[금기어] " + message).withStyle(color), null, GuiMessageTag.system());
+                mc.gui.hud.getChat().addPlayerMessage(Component.literal("[금기어] " + message).withStyle(color), null, null);
             }
         });
     }
