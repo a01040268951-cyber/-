@@ -15,10 +15,10 @@ import org.vosk.Recognizer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.ssaem.tabooword.HangulLetters;
 import com.ssaem.tabooword.TabooNetwork;
 import com.ssaem.tabooword.TabooStatus;
 import com.ssaem.tabooword.TabooWord;
+import com.ssaem.tabooword.TriggerGate;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -103,6 +103,7 @@ final class VoiceListener implements Runnable {
             int minChunk = rate / 20; // 50ms
             long cooldownUntil = 0;
             String lastShown = "";
+            TriggerGate gate = new TriggerGate();
 
             try (Recognizer recognizer = new Recognizer(model, rate)) {
                 while (running) {
@@ -118,12 +119,16 @@ final class VoiceListener implements Runnable {
 
                     if (!localAlive) {
                         recognizer.reset(); // 죽어 있는 동안 한 말은 버린다
+                        gate.reset();
                         continue;
                     }
                     boolean isFinal = recognizer.acceptWaveForm(samples, n);
                     String text = isFinal ? field(recognizer.getResult(), "text")
                             : field(recognizer.getPartialResult(), "partial");
                     if (text.isEmpty()) {
+                        if (isFinal) {
+                            gate.reset();
+                        }
                         continue;
                     }
                     if (!text.equals(lastShown)) {
@@ -138,10 +143,11 @@ final class VoiceListener implements Runnable {
                         }
                         continue;
                     }
-                    if (HangulLetters.findViolation(text, TabooStatus.letters()) >= 0) {
-                        String said = text;
+                    String said = gate.offer(text, isFinal, now, TabooStatus.letters());
+                    if (said != null) {
                         mc.execute(() -> ClientPacketDistributor.sendToServer(new TabooNetwork.SpokePayload(said)));
                         recognizer.reset();
+                        gate.reset();
                         cooldownUntil = now + COOLDOWN_MS;
                         lastShown = "";
                     }
