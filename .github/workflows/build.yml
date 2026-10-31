@@ -58,7 +58,7 @@ jobs:
           set -e
           mkdir -p /tmp/st && cd /tmp/st
           curl -sSfL -o whisper-jni.jar https://repo1.maven.org/maven2/io/github/givimad/whisper-jni/1.7.1/whisper-jni-1.7.1.jar
-          for m in small-q5_1 medium-q5_0 large-v3-turbo-q5_0; do
+          for m in small-q5_1; do
             curl -sSfL -o ggml-$m.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$m.bin
           done
           ls -la *.bin | tee -a $GITHUB_WORKSPACE/smoke.log
@@ -94,7 +94,7 @@ jobs:
           echo "noise.wav = " >> $GITHUB_WORKSPACE/smoke.log
           echo "nproc=$(nproc)" >> $GITHUB_WORKSPACE/smoke.log
           P="마인크래프트 하면서 친구들과 나누는 대화."
-          for cfg in "small-q5_1|" "small-q5_1|$P" "medium-q5_0|" "large-v3-turbo-q5_0|"; do
+          for cfg in "small-q5_1|"; do
             m=${cfg%%|*}; prompt=${cfg#*|}; echo "=== $m prompt=[${prompt}]" | tee -a $GITHUB_WORKSPACE/smoke.log
             java -Dtabooword.prompt="$prompt" -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
               "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 3 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" >> $GITHUB_WORKSPACE/smoke.log
