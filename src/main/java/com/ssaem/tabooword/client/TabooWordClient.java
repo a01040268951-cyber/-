@@ -5,7 +5,9 @@ import com.ssaem.tabooword.TabooWord;
 
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -18,7 +20,8 @@ import net.neoforged.neoforge.common.NeoForge;
 public class TabooWordClient {
     private static final VoiceListener LISTENER = new VoiceListener();
 
-    public TabooWordClient() {
+    public TabooWordClient(ModContainer container) {
+        container.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
         NeoForge.EVENT_BUS.addListener(TabooWordClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(TabooWordClient::onLogout);
     }

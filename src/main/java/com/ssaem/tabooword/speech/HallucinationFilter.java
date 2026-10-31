@@ -37,20 +37,37 @@ public final class HallucinationFilter {
         return hasHangul ? collapseRepeats(text) : "";
     }
 
-    /** "지금 지금 지금 지금..." 같은 반복 폭주를 두 번까지만 남긴다. */
+    /**
+     * 반복 폭주 정리: "너 뭐하니? 너 뭐하니? 너 뭐하니?..." → "너 뭐하니?",
+     * "지금 지금 지금 지금" → "지금 지금".
+     */
     static String collapseRepeats(String text) {
         String[] words = text.split(" ");
+        int len = words.length;
+        String[] key = new String[len];
+        for (int i = 0; i < len; i++) {
+            key[i] = words[i].replaceAll("[.,!?~…]", "");
+        }
+        // 문장 단위 반복: 앞 p개 단어가 끝까지 되풀이되면 한 번만 남김
+        for (int p = 2; p <= len / 2; p++) {
+            boolean periodic = true;
+            for (int k = p; k < len && periodic; k++) {
+                periodic = key[k].equals(key[k - p]) || (k == len - 1 && key[k - p].startsWith(key[k]));
+            }
+            if (periodic) {
+                return String.join(" ", java.util.Arrays.copyOf(words, p));
+            }
+        }
+        // 단어 반복: 세 번 이상은 두 번까지만
         StringBuilder sb = new StringBuilder();
-        String prev = null;
         int run = 0;
-        for (String w : words) {
-            run = w.equals(prev) ? run + 1 : 1;
-            prev = w;
+        for (int i = 0; i < len; i++) {
+            run = (i > 0 && key[i].equals(key[i - 1])) ? run + 1 : 1;
             if (run <= 2) {
                 if (sb.length() > 0) {
                     sb.append(' ');
                 }
-                sb.append(w);
+                sb.append(words[i]);
             }
         }
         return sb.toString();

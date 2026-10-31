@@ -85,8 +85,9 @@ jobs:
           ffmpeg -nostdin -loglevel error -y -f lavfi -i "anoisesrc=d=4:c=pink:a=0.03" -ar 16000 -ac 1 -sample_fmt s16 noise.wav
           echo "noise.wav = (잡음 4초, 말 없음)" >> $GITHUB_WORKSPACE/smoke.log
           echo "nproc=$(nproc)" >> $GITHUB_WORKSPACE/smoke.log
-          for m in base-q5_1 small-q5_1; do
-            java -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
+          for cfg in base-q5_1:tight base-q5_1:mid small-q5_1:tight small-q5_1:mid small-q5_1:full; do
+            m=${cfg%%:*}; ctx=${cfg##*:}; echo "=== $m ctx=$ctx" | tee -a $GITHUB_WORKSPACE/smoke.log
+            java -Dtabooword.ctx=$ctx -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
               "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 3 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" | tee -a $GITHUB_WORKSPACE/smoke.log
           done
 

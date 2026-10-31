@@ -7,19 +7,13 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.openal.AL10;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALC11;
-import org.vosk.LibVosk;
-import org.vosk.LogLevel;
-import org.vosk.Model;
-import org.vosk.Recognizer;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.ssaem.tabooword.TabooNetwork;
 import com.ssaem.tabooword.TabooStatus;
 import com.ssaem.tabooword.TabooWord;
-import com.ssaem.tabooword.TriggerGate;
-import com.ssaem.tabooword.VoskText;
+import com.ssaem.tabooword.speech.SpeechPipeline;
+import com.ssaem.tabooword.speech.TabooJudge;
+import com.ssaem.tabooword.speech.WhisperTranscriber;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -27,14 +21,15 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 /**
- * 마이크(기본 녹음 장치)를 OpenAL로 듣고 Vosk로 한국어를 인식한다.
+ * 마이크(기본 녹음 장치)를 OpenAL로 듣고 Whisper로 한국어를 인식한다.
  * 소리는 이 PC 밖으로 나가지 않고, 금지 자모가 들린 문장만 서버로 보낸다.
  */
 final class VoiceListener implements Runnable {
-    private static final int[] RATES = {16000, 48000, 44100};
+    private static final int RATE = SpeechPipeline.RATE; // 16000
     private static final long COOLDOWN_MS = 2500;
 
-    private static Model model; // 한 번 불러오면 계속 재사용 (로딩에 몇 초 걸림)
+    private static WhisperTranscriber transcriber; // 한 번 불러오면 계속 재사용
+    private static String loadedModel;
 
     private volatile boolean running;
     private volatile boolean failed;
@@ -55,7 +50,6 @@ final class VoiceListener implements Runnable {
         running = false;
     }
 
-    /** 서버를 나가면 다시 시도할 수 있게 실패 표시를 지운다. */
     void clearFailure() {
         failed = false;
     }
@@ -73,24 +67,28 @@ final class VoiceListener implements Runnable {
         Minecraft mc = Minecraft.getInstance();
         long device = 0L;
         try {
-            Path modelDir = ModelManager.ensureModel(mc.gameDirectory.toPath(), this::isRunning,
+            String size = ClientConfig.MODEL.get();
+            Path modelFile = ModelManager.ensureModel(mc.gameDirectory.toPath(), size, this::isRunning,
                     msg -> tell(msg, ChatFormatting.GRAY));
-            if (modelDir == null) {
+            if (modelFile == null) {
                 return;
             }
-            if (model == null) {
+            if (transcriber == null || !size.equals(loadedModel)) {
                 tell("음성 인식 준비 중...", ChatFormatting.GRAY);
-                LibVosk.setLogLevel(LogLevel.WARNINGS);
-                model = new Model(modelDir.toString());
+                if (transcriber != null) {
+                    transcriber.close();
+                }
+                int threads = ClientConfig.THREADS.get();
+                transcriber = new WhisperTranscriber(modelFile, threads > 0 ? threads : WhisperTranscriber.defaultThreads());
+                loadedModel = size;
             }
 
-            int rate = 0;
-            for (int r : RATES) {
-                device = ALC11.alcCaptureOpenDevice((CharSequence) null, r, AL10.AL_FORMAT_MONO16, r);
-                if (device != 0L) {
-                    rate = r;
-                    break;
-                }
+            // 16kHz로 열고, 안 되면 48kHz로 열어서 1/3로 줄인다
+            int captureRate = RATE;
+            device = ALC11.alcCaptureOpenDevice((CharSequence) null, RATE, AL10.AL_FORMAT_MONO16, RATE * 5);
+            if (device == 0L) {
+                captureRate = RATE * 3;
+                device = ALC11.alcCaptureOpenDevice((CharSequence) null, captureRate, AL10.AL_FORMAT_MONO16, captureRate * 5);
             }
             if (device == 0L) {
                 fail("마이크를 열 수 없어요. 윈도우 설정에서 기본 녹음 장치를 확인해 주세요.");
@@ -99,59 +97,59 @@ final class VoiceListener implements Runnable {
             ALC11.alcCaptureStart(device);
             tell("♪ 마이크로 듣는 중 — 금지: " + String.join(", ", TabooStatus.letters()), ChatFormatting.RED);
 
-            ShortBuffer nativeBuf = BufferUtils.createShortBuffer(rate);
-            short[] samples = new short[rate];
-            int minChunk = rate / 20; // 50ms
-            long cooldownUntil = 0;
-            String lastShown = "";
-            TriggerGate gate = new TriggerGate();
+            TabooJudge judge = new TabooJudge();
+            long[] cooldownUntil = {0};
+            SpeechPipeline pipeline = new SpeechPipeline(transcriber, (text, isFinal) -> {
+                if (!text.isEmpty()) {
+                    actionBar("♪ " + text);
+                }
+                long now = System.currentTimeMillis();
+                if (now < cooldownUntil[0] || !localAlive || !TabooStatus.enabled()) {
+                    return;
+                }
+                String said = judge.judge(text, isFinal, TabooStatus.letters());
+                if (said != null) {
+                    mc.execute(() -> ClientPacketDistributor.sendToServer(new TabooNetwork.SpokePayload(said)));
+                    judge.reset();
+                    cooldownUntil[0] = now + COOLDOWN_MS;
+                }
+            });
 
-            try (Recognizer recognizer = new Recognizer(model, rate)) {
-                while (running) {
-                    int available = ALC10.alcGetInteger(device, ALC11.ALC_CAPTURE_SAMPLES);
-                    if (available < minChunk) {
-                        Thread.sleep(20);
-                        continue;
-                    }
-                    int n = Math.min(available, samples.length);
-                    nativeBuf.clear();
-                    ALC11.alcCaptureSamples(device, nativeBuf, n);
-                    nativeBuf.get(samples, 0, n);
+            int bufLen = captureRate; // 1초 분량씩
+            ShortBuffer nativeBuf = BufferUtils.createShortBuffer(bufLen);
+            short[] samples = new short[bufLen];
+            short[] down = new short[bufLen / 3 + 1];
+            int minChunk = captureRate / 20; // 50ms
+            boolean wasAlive = true;
 
-                    if (!localAlive) {
-                        recognizer.reset(); // 죽어 있는 동안 한 말은 버린다
-                        gate.reset();
-                        continue;
-                    }
-                    boolean isFinal = recognizer.acceptWaveForm(samples, n);
-                    String text = isFinal ? field(VoskText.result(recognizer), "text")
-                            : field(VoskText.partial(recognizer), "partial");
-                    if (text.isEmpty()) {
-                        if (isFinal) {
-                            gate.reset();
-                        }
-                        continue;
-                    }
-                    if (!text.equals(lastShown)) {
-                        lastShown = text;
-                        actionBar("♪ " + text);
-                    }
+            while (running) {
+                int available = ALC10.alcGetInteger(device, ALC11.ALC_CAPTURE_SAMPLES);
+                if (available < minChunk) {
+                    Thread.sleep(20);
+                    continue;
+                }
+                int n = Math.min(available, bufLen);
+                nativeBuf.clear();
+                ALC11.alcCaptureSamples(device, nativeBuf, n);
+                nativeBuf.get(samples, 0, n);
 
-                    long now = System.currentTimeMillis();
-                    if (now < cooldownUntil || !TabooStatus.enabled()) {
-                        if (isFinal) {
-                            lastShown = "";
-                        }
-                        continue;
+                if (!localAlive) {
+                    wasAlive = false; // 죽어 있는 동안 한 말은 버린다
+                    continue;
+                }
+                if (!wasAlive) {
+                    pipeline.reset();
+                    judge.reset();
+                    wasAlive = true;
+                }
+                if (captureRate == RATE) {
+                    pipeline.feed(samples, n);
+                } else {
+                    int m = n / 3;
+                    for (int i = 0; i < m; i++) {
+                        down[i] = (short) ((samples[3 * i] + samples[3 * i + 1] + samples[3 * i + 2]) / 3);
                     }
-                    String said = gate.offer(text, isFinal, now, TabooStatus.letters());
-                    if (said != null) {
-                        mc.execute(() -> ClientPacketDistributor.sendToServer(new TabooNetwork.SpokePayload(said)));
-                        recognizer.reset();
-                        gate.reset();
-                        cooldownUntil = now + COOLDOWN_MS;
-                        lastShown = "";
-                    }
+                    pipeline.feed(down, m);
                 }
             }
         } catch (InterruptedException e) {
@@ -172,16 +170,6 @@ final class VoiceListener implements Runnable {
         failed = true;
         running = false;
         tell(message, ChatFormatting.RED);
-    }
-
-    private static String field(String json, String key) {
-        try {
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            JsonElement el = obj.get(key);
-            return el == null ? "" : el.getAsString().trim();
-        } catch (RuntimeException e) {
-            return "";
-        }
     }
 
     private static void tell(String message, ChatFormatting color) {
