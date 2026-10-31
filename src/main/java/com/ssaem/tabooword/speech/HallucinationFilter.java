@@ -34,6 +34,25 @@ public final class HallucinationFilter {
             char c = text.charAt(i);
             hasHangul = (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3131 && c <= 0x3163);
         }
-        return hasHangul ? text : "";
+        return hasHangul ? collapseRepeats(text) : "";
+    }
+
+    /** "지금 지금 지금 지금..." 같은 반복 폭주를 두 번까지만 남긴다. */
+    static String collapseRepeats(String text) {
+        String[] words = text.split(" ");
+        StringBuilder sb = new StringBuilder();
+        String prev = null;
+        int run = 0;
+        for (String w : words) {
+            run = w.equals(prev) ? run + 1 : 1;
+            prev = w;
+            if (run <= 2) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(w);
+            }
+        }
+        return sb.toString();
     }
 }

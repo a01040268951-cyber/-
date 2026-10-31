@@ -87,7 +87,7 @@ jobs:
           echo "nproc=$(nproc)" >> $GITHUB_WORKSPACE/smoke.log
           for m in base-q5_1 small-q5_1; do
             java -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
-              "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 2 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" | tee -a $GITHUB_WORKSPACE/smoke.log
+              "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 3 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" | tee -a $GITHUB_WORKSPACE/smoke.log
           done
 
       # 결과물을 taboo-mod-dist 브랜치에 커밋 (아티팩트 대신 git으로 받기 위함)

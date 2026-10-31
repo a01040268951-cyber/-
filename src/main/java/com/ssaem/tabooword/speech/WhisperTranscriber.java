@@ -47,6 +47,9 @@ public final class WhisperTranscriber implements SpeechPipeline.Transcriber, Aut
 
     @Override
     public String transcribe(float[] samples, int count) {
+        // whisper는 기본적으로 30초 분량을 계산한다. 실제 길이만큼만 계산하게 줄여서 몇 배 빠르게.
+        // (인코더 1초 = 50칸)
+        params.audioCtx = Math.min(1500, (int) Math.ceil(count / 16000.0 * 50) + 64);
         int rc = whisper.full(context, params, samples, count);
         if (rc != 0) {
             return "";

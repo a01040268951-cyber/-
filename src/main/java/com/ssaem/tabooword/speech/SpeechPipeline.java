@@ -47,6 +47,7 @@ public final class SpeechPipeline {
     private int silentRun;
     private int lastInterimAt;
     private float noiseFloor = 0.004f;
+    private int interimEvery = INTERIM_EVERY;
 
     public SpeechPipeline(Transcriber transcriber, Listener listener) {
         this.transcriber = transcriber;
@@ -110,7 +111,7 @@ public final class SpeechPipeline {
             finish();
             return;
         }
-        if (utterLen >= MIN_INTERIM && utterLen - lastInterimAt >= INTERIM_EVERY) {
+        if (utterLen >= MIN_INTERIM && utterLen - lastInterimAt >= interimEvery) {
             lastInterimAt = utterLen;
             emit(false);
         }
@@ -129,7 +130,11 @@ public final class SpeechPipeline {
         int n = Math.max(utterLen, MIN_INPUT);
         float[] input = new float[n]; // 1초 미만이면 뒤를 0(무음)으로 채움
         System.arraycopy(utter, 0, input, 0, utterLen);
+        long start = System.nanoTime();
         String text = HallucinationFilter.clean(transcriber.transcribe(input, n));
+        // 인식이 느린 PC에서는 중간 인식 간격을 늘려서 밀리지 않게 한다
+        int costSamples = (int) ((System.nanoTime() - start) / 1_000_000L * RATE / 1000);
+        interimEvery = Math.max(INTERIM_EVERY, costSamples * 6 / 5);
         if (!text.isEmpty() || isFinal) {
             listener.onText(text, isFinal);
         }
