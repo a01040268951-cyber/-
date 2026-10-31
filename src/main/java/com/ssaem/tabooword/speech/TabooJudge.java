@@ -7,7 +7,7 @@ import com.ssaem.tabooword.HangulLetters;
 /**
  * 인식 결과로 사망 여부를 판정한다.
  *  - 최종 결과에 금지 자모 → 사망
- *  - 중간 결과: 걸린 글자 뒤에 한글이 더 인식됐으면 그 글자는 확정 → 사망.
+ *  - 중간 결과: 3글자 이상 인식됐고 걸린 글자 뒤에 글자가 더 있으면 확정 → 사망.
  *    맨 끝 글자에서 걸렸으면 (말이 잘렸을 수 있음, 예: "감사원") 다음 결과에서도 걸려야 사망
  */
 public final class TabooJudge {
@@ -25,11 +25,16 @@ public final class TabooJudge {
             return null;
         }
         boolean moreAfter = false;
-        for (int i = idx + 1; i < text.length() && !moreAfter; i++) {
+        int syllables = 0;
+        for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            moreAfter = c >= 0xAC00 && c <= 0xD7A3;
+            if (c >= 0xAC00 && c <= 0xD7A3) {
+                syllables++;
+                moreAfter |= i > idx;
+            }
         }
-        if (moreAfter || lastInterimHit) {
+        // 2글자 이하의 짧은 중간 결과는 자주 틀린다 (예: "저기" → "정기") → 한 번 더 확인
+        if ((moreAfter && syllables >= 3) || lastInterimHit) {
             lastInterimHit = false;
             return text;
         }
