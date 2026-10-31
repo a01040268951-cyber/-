@@ -19,6 +19,7 @@ import com.ssaem.tabooword.TabooNetwork;
 import com.ssaem.tabooword.TabooStatus;
 import com.ssaem.tabooword.TabooWord;
 import com.ssaem.tabooword.TriggerGate;
+import com.ssaem.tabooword.VoskText;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -123,8 +124,8 @@ final class VoiceListener implements Runnable {
                         continue;
                     }
                     boolean isFinal = recognizer.acceptWaveForm(samples, n);
-                    String text = isFinal ? field(recognizer.getResult(), "text")
-                            : field(recognizer.getPartialResult(), "partial");
+                    String text = isFinal ? field(VoskText.result(recognizer), "text")
+                            : field(VoskText.partial(recognizer), "partial");
                     if (text.isEmpty()) {
                         if (isFinal) {
                             gate.reset();

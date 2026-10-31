@@ -10,6 +10,7 @@ import org.vosk.Model;
 import org.vosk.Recognizer;
 
 import com.ssaem.tabooword.TriggerGate;
+import com.ssaem.tabooword.VoskText;
 
 /**
  * CI 전용: 한국어 음성 파일을 모드와 같은 방식(100ms 단위 short 배열 + TriggerGate)으로 넣어
@@ -47,7 +48,7 @@ public class VoskSmokeTest {
                             samples[k] = (short) ((bytes[2 * k] & 0xff) | (bytes[2 * k + 1] << 8));
                         }
                         boolean fin = rec.acceptWaveForm(samples, count);
-                        String text = field(fin ? rec.getResult() : rec.getPartialResult(), fin ? "text" : "partial");
+                        String text = field(fin ? VoskText.result(rec) : VoskText.partial(rec), fin ? "text" : "partial");
                         t += 100;
                         if (text.isEmpty()) continue;
                         String said = gate.offer(text, fin, t, banned);
@@ -56,7 +57,7 @@ public class VoskSmokeTest {
                             killedAt = t;
                         }
                     }
-                    String fin = field(rec.getFinalResult(), "text");
+                    String fin = field(VoskText.finalResult(rec), "text");
                     System.out.println("FILE " + args[i]);
                     System.out.println("  인식(최종) = " + fin);
                     System.out.println("  판정       = " + (killed == null ? "생존" : "사망 \"" + killed + "\" @" + killedAt + "ms"));

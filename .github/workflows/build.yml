@@ -79,7 +79,7 @@ jobs:
           다 같이 가자
           너 뭐 하니
           EOS
-          java -cp "vosk.jar:jna.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
+          java -Djna.encoding=MS949 -cp "vosk.jar:jna.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
             "$GITHUB_WORKSPACE/tools/VoskSmokeTest.java" vosk-model-small-ko-0.22 $files 2>&1 | tee -a $GITHUB_WORKSPACE/smoke.log
 
       # 결과물을 taboo-mod-dist 브랜치에 커밋 (아티팩트 대신 git으로 받기 위함)
