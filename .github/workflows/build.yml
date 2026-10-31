@@ -51,17 +51,18 @@ jobs:
           path: build/libs/*.jar
           if-no-files-found: error
 
-      # 한국어 음성 → Vosk 인식 → ㅇ 판정이 실제로 되는지 확인 (마이크 대신 TTS 음성 파일 사용)
-      - name: Voice recognition smoke test
+      # Whisper 모델별 정확도·속도 비교 (모드와 같은 파이프라인)
+      - name: Whisper smoke test
         continue-on-error: true
         run: |
           set -e
           mkdir -p /tmp/st && cd /tmp/st
-          curl -sSfL -o vosk.jar https://repo1.maven.org/maven2/com/alphacephei/vosk/0.3.45/vosk-0.3.45.jar
-          curl -sSfL -o jna.jar https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar
-          echo "--- natives in vosk.jar"; unzip -l vosk.jar | grep -E "\.(so|dll|dylib)$" || true
-          curl -sSfL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-ko-0.22.zip
-          unzip -q model.zip
+          curl -sSfL -o whisper-jni.jar https://repo1.maven.org/maven2/io/github/givimad/whisper-jni/1.7.1/whisper-jni-1.7.1.jar
+          echo "--- natives"; unzip -l whisper-jni.jar | grep -E "\.(so|dll|dylib)" | tee -a $GITHUB_WORKSPACE/smoke.log || true
+          for m in base-q5_1 small-q5_1; do
+            curl -sSfL -o ggml-$m.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$m.bin
+          done
+          ls -la *.bin | tee -a $GITHUB_WORKSPACE/smoke.log
           which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
           pip install -q gTTS
           i=0; files=""
@@ -71,16 +72,23 @@ jobs:
             echo "s$i.wav = $line" >> $GITHUB_WORKSPACE/smoke.log; files="$files s$i.wav"
           done <<'EOS'
           안녕하세요 반갑습니다
-          오늘 날씨가 좋네요
           감사합니다
           나는 바보다
           빨리 가자
           저기 봐 크리퍼다
           다 같이 가자
           너 뭐 하니
+          나 지금 집에 가
+          다이아 캐러 가자
+          아 진짜 미치겠다
           EOS
-          java -Djna.encoding=MS949 -cp "vosk.jar:jna.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
-            "$GITHUB_WORKSPACE/tools/VoskSmokeTest.java" vosk-model-small-ko-0.22 $files 2>&1 | tee -a $GITHUB_WORKSPACE/smoke.log
+          ffmpeg -nostdin -loglevel error -y -f lavfi -i "anoisesrc=d=4:c=pink:a=0.03" -ar 16000 -ac 1 -sample_fmt s16 noise.wav
+          echo "noise.wav = (잡음 4초, 말 없음)" >> $GITHUB_WORKSPACE/smoke.log
+          echo "nproc=$(nproc)" >> $GITHUB_WORKSPACE/smoke.log
+          for m in base-q5_1 small-q5_1; do
+            java -cp "whisper-jni.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
+              "$GITHUB_WORKSPACE/tools/WhisperSmokeTest.java" ggml-$m.bin 2 $files noise.wav 2>&1 | grep -v "^whisper_\|^ggml_\|^\s*$" | tee -a $GITHUB_WORKSPACE/smoke.log
+          done
 
       # 결과물을 taboo-mod-dist 브랜치에 커밋 (아티팩트 대신 git으로 받기 위함)
       - name: Publish jar to dist branch

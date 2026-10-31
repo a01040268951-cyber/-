@@ -116,6 +116,10 @@ dependencies {
     jarJar(implementation("com.alphacephei:vosk:0.3.45")) {
         transitive = false
     }
+    // Whisper (whisper.cpp JNI, MIT). 윈도우/맥/리눅스 네이티브 포함.
+    jarJar(implementation("io.github.givimad:whisper-jni:1.7.1")) {
+        transitive = false
+    }
 
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
