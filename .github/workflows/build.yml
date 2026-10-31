@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -67,4 +70,18 @@ jobs:
           gtts-cli "나는 바보다" -l ko -o d.mp3
           for f in a b c d; do ffmpeg -loglevel error -y -i $f.mp3 -ar 16000 -ac 1 -sample_fmt s16 $f.wav; done
           java -cp "vosk.jar:jna.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
-            "$GITHUB_WORKSPACE/tools/VoskSmokeTest.java" vosk-model-small-ko-0.22 a.wav b.wav c.wav d.wav
+            "$GITHUB_WORKSPACE/tools/VoskSmokeTest.java" vosk-model-small-ko-0.22 a.wav b.wav c.wav d.wav 2>&1 | tee $GITHUB_WORKSPACE/smoke.log
+
+      # 결과물을 taboo-mod-dist 브랜치에 커밋 (아티팩트 대신 git으로 받기 위함)
+      - name: Publish jar to dist branch
+        if: github.ref == 'refs/heads/taboo-mod'
+        run: |
+          mkdir -p /tmp/dist && cp build/libs/*.jar /tmp/dist/
+          [ -f smoke.log ] && cp smoke.log /tmp/dist/ || echo "no smoke log" > /tmp/dist/smoke.log
+          unzip -l build/libs/*.jar > /tmp/dist/jar-contents.txt
+          cd /tmp/dist
+          git init -q -b taboo-mod-dist
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A && git commit -qm "build ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" taboo-mod-dist
