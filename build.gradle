@@ -27,7 +27,7 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    mavenCentral()
 }
 
 base {
@@ -111,6 +111,12 @@ configurations {
 }
 
 dependencies {
+    // Vosk: 오프라인 음성 인식 (Apache 2.0). 윈도우/맥/리눅스 네이티브 라이브러리 포함.
+    // JNA는 마인크래프트에 이미 들어 있으므로 함께 넣지 않는다.
+    jarJar(implementation("com.alphacephei:vosk:0.3.45")) {
+        transitive = false
+    }
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

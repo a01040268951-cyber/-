@@ -24,9 +24,33 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build --no-configuration-cache --stacktrace
 
+      - name: Show jar contents
+        run: unzip -l build/libs/*.jar
+
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
           name: tabooword-jar
           path: build/libs/*.jar
           if-no-files-found: error
+
+      # 한국어 음성 → Vosk 인식 → ㅇ 판정이 실제로 되는지 확인 (마이크 대신 TTS 음성 파일 사용)
+      - name: Voice recognition smoke test
+        continue-on-error: true
+        run: |
+          set -e
+          mkdir -p /tmp/st && cd /tmp/st
+          curl -sSfL -o vosk.jar https://repo1.maven.org/maven2/com/alphacephei/vosk/0.3.45/vosk-0.3.45.jar
+          curl -sSfL -o jna.jar https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar
+          echo "--- natives in vosk.jar"; unzip -l vosk.jar | grep -E "\.(so|dll|dylib)$" || true
+          curl -sSfL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-ko-0.22.zip
+          unzip -q model.zip
+          which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          pip install -q gTTS
+          gtts-cli "안녕하세요 반갑습니다" -l ko -o a.mp3
+          gtts-cli "오늘 날씨가 좋네요" -l ko -o b.mp3
+          gtts-cli "감사합니다" -l ko -o c.mp3
+          gtts-cli "나는 바보다" -l ko -o d.mp3
+          for f in a b c d; do ffmpeg -loglevel error -y -i $f.mp3 -ar 16000 -ac 1 -sample_fmt s16 $f.wav; done
+          java -cp "vosk.jar:jna.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
+            "$GITHUB_WORKSPACE/tools/VoskSmokeTest.java" vosk-model-small-ko-0.22 a.wav b.wav c.wav d.wav

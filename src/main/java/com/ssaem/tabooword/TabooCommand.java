@@ -58,6 +58,7 @@ public final class TabooCommand {
     private static int setEnabled(CommandContext<CommandSourceStack> ctx, boolean on) {
         TabooConfig.ENABLED.set(on);
         TabooConfig.SPEC.save();
+        TabooNetwork.broadcastStatus(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.literal("[금기어] " + (on ? "켜졌습니다" : "꺼졌습니다"))
                 .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.GRAY), true);
         return 1;
@@ -76,6 +77,7 @@ public final class TabooCommand {
         letters.add(letter);
         TabooConfig.BANNED_LETTERS.set(letters);
         TabooConfig.SPEC.save();
+        TabooNetwork.broadcastStatus(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.literal("[금기어] 추가: " + letter + " → 금지 자모: " + String.join(" ", letters))
                 .withStyle(ChatFormatting.YELLOW), true);
         return 1;
@@ -89,6 +91,7 @@ public final class TabooCommand {
         }
         TabooConfig.BANNED_LETTERS.set(letters);
         TabooConfig.SPEC.save();
+        TabooNetwork.broadcastStatus(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.literal("[금기어] 제거: " + letter + " → 금지 자모: "
                 + (letters.isEmpty() ? "(없음)" : String.join(" ", letters))).withStyle(ChatFormatting.YELLOW), true);
         return 1;
