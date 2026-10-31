@@ -181,7 +181,7 @@ final class VoiceListener implements Runnable {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
             if (mc.player != null) {
-                mc.player.displayClientMessage(Component.literal("[금기어] " + message).withStyle(color), false);
+                mc.player.sendSystemMessage(Component.literal("[금기어] " + message).withStyle(color), false);
             }
         });
     }
@@ -190,7 +190,7 @@ final class VoiceListener implements Runnable {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
             if (mc.player != null) {
-                mc.player.displayClientMessage(Component.literal(message).withStyle(ChatFormatting.GRAY), true);
+                mc.player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.GRAY), true);
             }
         });
     }

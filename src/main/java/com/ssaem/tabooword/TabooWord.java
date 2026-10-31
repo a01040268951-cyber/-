@@ -18,7 +18,7 @@ public class TabooWord {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TabooWord(IEventBus modEventBus, ModContainer modContainer) {
-        modContainer.registerConfig(ModConfig.Type.SERVER, TabooConfig.SPEC);
+        modContainer.registerConfig(ModConfig.Type.SYNCED, TabooConfig.SPEC);
         modEventBus.addListener(TabooNetwork::register);
 
         NeoForge.EVENT_BUS.addListener(TabooCommand::register);
