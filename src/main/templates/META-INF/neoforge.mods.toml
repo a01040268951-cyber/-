@@ -1,0 +1,28 @@
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="금기어 (${mod_name})"
+logoFile="tabooword.png"
+authors="쎔 (Ssaem)"
+description='''
+채팅에 금지된 한글 자모(기본: ㅇ)가 들어간 글자를 치면 그 자리에서 죽습니다.
+"안녕", "방", "ㅇㅇ" 전부 아웃. /taboo 명령어로 켜기·끄기, 금지 자모 추가·제거.
+
+Type any Hangul syllable containing a banned letter (default: ㅇ) in chat and you die instantly.
+'''
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
