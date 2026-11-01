@@ -23,6 +23,7 @@ public class TabooWord {
 
         NeoForge.EVENT_BUS.addListener(TabooCommand::register);
         NeoForge.EVENT_BUS.addListener(TabooWord::onLogin);
+        NeoForge.EVENT_BUS.addListener(Challenges::onEarn);
     }
 
     private static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {

@@ -53,6 +53,7 @@ jobs:
 
       # Whisper 모델별 정확도·속도 비교 (모드와 같은 파이프라인)
       - name: Whisper smoke test
+        if: ${{ !contains(github.event.head_commit.message, '[skip-voice]') }}
         continue-on-error: true
         run: |
           set -e
