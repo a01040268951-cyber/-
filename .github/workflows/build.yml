@@ -103,6 +103,21 @@ jobs:
           ffmpeg -nostdin -loglevel error -y -f lavfi -i "anoisesrc=d=4:c=pink:a=0.05" -ar 16000 -ac 1 -sample_fmt s16 noise.wav
           echo "noise.wav = " >> $GITHUB_WORKSPACE/smoke.log
           echo "nproc=$(nproc)" >> $GITHUB_WORKSPACE/smoke.log
+          # 빠른 엔진: 모드와 같은 주소에서 실행 파일·모델을 받는다
+          SV=v1.13.3; SM=sherpa-onnx-streaming-zipformer-korean-2024-06-16
+          curl -sSfL -o native.jar https://github.com/k2-fsa/sherpa-onnx/releases/download/$SV/sherpa-onnx-native-lib-linux-x64-$SV.jar
+          mkdir -p nat && (cd nat && unzip -oq ../native.jar)
+          mkdir -p $SM
+          for f in encoder-epoch-99-avg-1.int8.onnx decoder-epoch-99-avg-1.int8.onnx joiner-epoch-99-avg-1.int8.onnx tokens.txt; do
+            curl -sSfL -o $SM/$f https://huggingface.co/k2-fsa/$SM/resolve/main/$f && echo "HF k2-fsa OK $f" >> $GITHUB_WORKSPACE/smoke.log \
+              || { curl -sSfL -o $SM/$f https://huggingface.co/csukuangfj/$SM/resolve/main/$f && echo "HF csukuangfj OK $f" >> $GITHUB_WORKSPACE/smoke.log; } \
+              || echo "HF FAIL $f" >> $GITHUB_WORKSPACE/smoke.log
+          done
+          ls -la $SM >> $GITHUB_WORKSPACE/smoke.log
+          echo "=== streaming(fast)" >> $GITHUB_WORKSPACE/smoke.log
+          java -Dsherpa_onnx.native.path=$PWD/nat/sherpa-onnx/native/linux-x64 \
+            -cp "$GITHUB_WORKSPACE/libs/sherpa-onnx-v1.13.3.jar:$GITHUB_WORKSPACE/build/classes/java/main" \
+            "$GITHUB_WORKSPACE/tools/StreamSmokeTest.java" $SM 2 $files noise.wav 2>&1 >> $GITHUB_WORKSPACE/smoke.log || echo "stream test failed" >> $GITHUB_WORKSPACE/smoke.log
           P="마인크래프트 하면서 친구들과 나누는 대화."
           for cfg in "small-q5_1|"; do
             m=${cfg%%|*}; prompt=${cfg#*|}; echo "=== $m prompt=[${prompt}]" | tee -a $GITHUB_WORKSPACE/smoke.log

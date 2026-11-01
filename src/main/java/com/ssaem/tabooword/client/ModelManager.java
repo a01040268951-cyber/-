@@ -31,6 +31,96 @@ final class ModelManager {
         return "small".equals(size) ? "약 190MB" : "약 60MB";
     }
 
+    // ---------- 빠른 엔진 (sherpa-onnx 스트리밍) ----------
+    static final String SHERPA_VERSION = "v1.13.3";
+    static final String STREAM_MODEL = "sherpa-onnx-streaming-zipformer-korean-2024-06-16";
+    private static final String[] STREAM_MODEL_URLS = {
+            "https://huggingface.co/k2-fsa/" + STREAM_MODEL + "/resolve/main/",
+            "https://huggingface.co/csukuangfj/" + STREAM_MODEL + "/resolve/main/",
+    };
+
+    static String platform() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        String arch = System.getProperty("os.arch", "").toLowerCase();
+        String o = os.contains("win") ? "win" : (os.contains("mac") || os.contains("darwin")) ? "osx" : "linux";
+        String a = (arch.contains("aarch64") || arch.contains("arm64")) ? "aarch64" : "x64";
+        return o + "-" + a;
+    }
+
+    /** 스트리밍 인식 실행 파일(onnxruntime + sherpa-onnx-jni)을 받아 풀고, 그 폴더를 돌려준다. */
+    static Path ensureSherpaNatives(Path gameDir, BooleanSupplier keepGoing, Consumer<String> notify) throws IOException {
+        String plat = platform();
+        Path dir = gameDir.resolve("tabooword").resolve("native-" + SHERPA_VERSION).resolve(plat);
+        Path ready = dir.resolve(".ready");
+        if (Files.exists(ready)) {
+            return dir;
+        }
+        Files.createDirectories(dir);
+        String url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/" + SHERPA_VERSION
+                + "/sherpa-onnx-native-lib-" + plat + "-" + SHERPA_VERSION + ".jar";
+        Path part = dir.resolve("native.jar.part");
+        notify.accept("음성 인식 실행 파일 내려받는 중... (약 10MB)");
+        if (!download(url, part, keepGoing, notify)) {
+            Files.deleteIfExists(part);
+            return null;
+        }
+        String prefix = "sherpa-onnx/native/" + plat + "/";
+        try (java.util.zip.ZipInputStream zin = new java.util.zip.ZipInputStream(Files.newInputStream(part))) {
+            java.util.zip.ZipEntry e;
+            while ((e = zin.getNextEntry()) != null) {
+                String name = e.getName();
+                if (!e.isDirectory() && name.startsWith(prefix) && name.indexOf('/', prefix.length()) < 0) {
+                    Files.copy(zin, dir.resolve(name.substring(prefix.length())), StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+        Files.deleteIfExists(part);
+        Files.writeString(ready, "ok");
+        return dir;
+    }
+
+    /** 스트리밍 한국어 모델(약 130MB)을 받아 둔 폴더. */
+    static Path ensureStreamModel(Path gameDir, String[] files, BooleanSupplier keepGoing, Consumer<String> notify) throws IOException {
+        Path dir = gameDir.resolve("tabooword").resolve(STREAM_MODEL);
+        Path ready = dir.resolve(".ready");
+        if (Files.exists(ready)) {
+            return dir;
+        }
+        Files.createDirectories(dir);
+        notify.accept("빠른 음성 인식 모델을 처음 한 번 내려받는 중... (약 130MB)");
+        for (String f : files) {
+            Path target = dir.resolve(f);
+            if (Files.isRegularFile(target) && Files.size(target) > 0) {
+                continue;
+            }
+            Path part = dir.resolve(f + ".part");
+            IOException last = null;
+            boolean ok = false;
+            for (String base : STREAM_MODEL_URLS) {
+                try {
+                    if (!download(base + f, part, keepGoing, notify)) {
+                        Files.deleteIfExists(part);
+                        return null;
+                    }
+                    ok = true;
+                    break;
+                } catch (IOException e) {
+                    last = e;
+                }
+            }
+            if (!ok) {
+                Files.deleteIfExists(part);
+                throw last != null ? last : new IOException("download failed: " + f);
+            }
+            Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+        Files.writeString(ready, "ok");
+        notify.accept("모델 준비 완료!");
+        return dir;
+    }
+
+    // ---------- 정확한 엔진 (Whisper) ----------
+
     /** 모델 파일 경로. 없으면 내려받는다. 중간에 취소되면 null. */
     static Path ensureModel(Path gameDir, String size, BooleanSupplier keepGoing, Consumer<String> notify) throws IOException {
         Path base = gameDir.resolve("tabooword");

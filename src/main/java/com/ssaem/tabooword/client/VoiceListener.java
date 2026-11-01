@@ -12,6 +12,7 @@ import com.ssaem.tabooword.TabooNetwork;
 import com.ssaem.tabooword.TabooStatus;
 import com.ssaem.tabooword.TabooWord;
 import com.ssaem.tabooword.speech.SpeechPipeline;
+import com.ssaem.tabooword.speech.StreamingEngine;
 import com.ssaem.tabooword.speech.TabooJudge;
 import com.ssaem.tabooword.speech.WhisperTranscriber;
 
@@ -30,6 +31,15 @@ final class VoiceListener implements Runnable {
 
     private static WhisperTranscriber transcriber; // 한 번 불러오면 계속 재사용
     private static String loadedModel;
+    private static StreamingEngine streaming;
+    private static volatile java.util.function.Consumer<String> streamSink = t -> { };
+
+    /** 소리를 받는 쪽 (엔진마다 다름) */
+    private interface Feeder {
+        void feed(short[] samples, int count);
+
+        void reset();
+    }
 
     private volatile boolean running;
     private volatile boolean failed;
@@ -67,21 +77,84 @@ final class VoiceListener implements Runnable {
         Minecraft mc = Minecraft.getInstance();
         long device = 0L;
         try {
-            String size = ClientConfig.MODEL.get();
-            Path modelFile = ModelManager.ensureModel(mc.gameDirectory.toPath(), size, this::isRunning,
-                    msg -> tell(msg, ChatFormatting.GRAY));
-            if (modelFile == null) {
-                return;
-            }
-            if (transcriber == null || !size.equals(loadedModel)) {
-                tell("음성 인식 준비 중...", ChatFormatting.GRAY);
-                if (transcriber != null) {
-                    transcriber.close();
+            boolean fast = "fast".equals(ClientConfig.ENGINE.get());
+            int cfgThreads = ClientConfig.THREADS.get();
+            TabooJudge judge = new TabooJudge();
+            long[] cooldownUntil = {0};
+            Feeder[] feederRef = new Feeder[1];
+            // 인식 결과 처리 (확정된 글자면 confirmed = true → 걸리면 즉시 사망)
+            java.util.function.BiConsumer<String, Boolean> onText = (text, confirmed) -> {
+                if (!text.isEmpty()) {
+                    actionBar("♪ " + text);
                 }
-                int threads = ClientConfig.THREADS.get();
-                transcriber = new WhisperTranscriber(modelFile, threads > 0 ? threads : WhisperTranscriber.defaultThreads());
-                loadedModel = size;
+                long now = System.currentTimeMillis();
+                if (now < cooldownUntil[0] || !localAlive || !TabooStatus.enabled()) {
+                    return;
+                }
+                String said = judge.judge(text, confirmed, TabooStatus.letters());
+                if (said != null) {
+                    mc.execute(() -> ClientPacketDistributor.sendToServer(new TabooNetwork.SpokePayload(said)));
+                    judge.reset();
+                    cooldownUntil[0] = now + COOLDOWN_MS;
+                    if (feederRef[0] != null) {
+                        feederRef[0].reset();
+                    }
+                }
+            };
+
+            if (fast) {
+                Path nativeDir = ModelManager.ensureSherpaNatives(mc.gameDirectory.toPath(), this::isRunning,
+                        msg -> tell(msg, ChatFormatting.GRAY));
+                Path modelDir = nativeDir == null ? null : ModelManager.ensureStreamModel(mc.gameDirectory.toPath(),
+                        StreamingEngine.MODEL_FILES, this::isRunning, msg -> tell(msg, ChatFormatting.GRAY));
+                if (modelDir == null) {
+                    return;
+                }
+                if (streaming == null) {
+                    tell("음성 인식 준비 중...", ChatFormatting.GRAY);
+                    System.setProperty("sherpa_onnx.native.path", nativeDir.toAbsolutePath().toString());
+                    streaming = new StreamingEngine(modelDir, cfgThreads > 0 ? Math.min(cfgThreads, 4) : 2,
+                            text -> streamSink.accept(text));
+                }
+                streaming.reset();
+                streamSink = text -> onText.accept(text, true);
+                StreamingEngine engine = streaming;
+                feederRef[0] = new Feeder() {
+                    public void feed(short[] samples, int count) {
+                        engine.feed(samples, count);
+                    }
+
+                    public void reset() {
+                        engine.reset();
+                    }
+                };
+            } else {
+                String size = ClientConfig.MODEL.get();
+                Path modelFile = ModelManager.ensureModel(mc.gameDirectory.toPath(), size, this::isRunning,
+                        msg -> tell(msg, ChatFormatting.GRAY));
+                if (modelFile == null) {
+                    return;
+                }
+                if (transcriber == null || !size.equals(loadedModel)) {
+                    tell("음성 인식 준비 중...", ChatFormatting.GRAY);
+                    if (transcriber != null) {
+                        transcriber.close();
+                    }
+                    transcriber = new WhisperTranscriber(modelFile, cfgThreads > 0 ? cfgThreads : WhisperTranscriber.defaultThreads());
+                    loadedModel = size;
+                }
+                SpeechPipeline pipeline = new SpeechPipeline(transcriber, (text, isFinal) -> onText.accept(text, isFinal));
+                feederRef[0] = new Feeder() {
+                    public void feed(short[] samples, int count) {
+                        pipeline.feed(samples, count);
+                    }
+
+                    public void reset() {
+                        pipeline.reset();
+                    }
+                };
             }
+            Feeder feeder = feederRef[0];
 
             // 16kHz로 열고, 안 되면 48kHz로 열어서 1/3로 줄인다
             int captureRate = RATE;
@@ -96,24 +169,6 @@ final class VoiceListener implements Runnable {
             }
             ALC11.alcCaptureStart(device);
             tell("♪ 마이크로 듣는 중 — 금지: " + String.join(", ", TabooStatus.letters()), ChatFormatting.RED);
-
-            TabooJudge judge = new TabooJudge();
-            long[] cooldownUntil = {0};
-            SpeechPipeline pipeline = new SpeechPipeline(transcriber, (text, isFinal) -> {
-                if (!text.isEmpty()) {
-                    actionBar("♪ " + text);
-                }
-                long now = System.currentTimeMillis();
-                if (now < cooldownUntil[0] || !localAlive || !TabooStatus.enabled()) {
-                    return;
-                }
-                String said = judge.judge(text, isFinal, TabooStatus.letters());
-                if (said != null) {
-                    mc.execute(() -> ClientPacketDistributor.sendToServer(new TabooNetwork.SpokePayload(said)));
-                    judge.reset();
-                    cooldownUntil[0] = now + COOLDOWN_MS;
-                }
-            });
 
             int bufLen = captureRate; // 1초 분량씩
             ShortBuffer nativeBuf = BufferUtils.createShortBuffer(bufLen);
@@ -138,18 +193,18 @@ final class VoiceListener implements Runnable {
                     continue;
                 }
                 if (!wasAlive) {
-                    pipeline.reset();
+                    feeder.reset();
                     judge.reset();
                     wasAlive = true;
                 }
                 if (captureRate == RATE) {
-                    pipeline.feed(samples, n);
+                    feeder.feed(samples, n);
                 } else {
                     int m = n / 3;
                     for (int i = 0; i < m; i++) {
                         down[i] = (short) ((samples[3 * i] + samples[3 * i + 1] + samples[3 * i + 2]) / 3);
                     }
-                    pipeline.feed(down, m);
+                    feeder.feed(down, m);
                 }
             }
         } catch (InterruptedException e) {

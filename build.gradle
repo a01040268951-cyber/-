@@ -111,6 +111,9 @@ configurations {
 }
 
 dependencies {
+    // sherpa-onnx 자바 API (Apache 2.0). 클래스는 모드 jar 안에 직접 포함, 실행 파일은 첫 실행 때 내려받음.
+    implementation files('libs/sherpa-onnx-v1.13.3.jar')
+
     // Whisper (whisper.cpp JNI, MIT). 윈도우/맥/리눅스 네이티브 포함.
     jarJar(implementation("io.github.givimad:whisper-jni:1.7.1")) {
         transitive = false
@@ -186,5 +189,12 @@ idea {
     module {
         downloadSources = true
         downloadJavadoc = true
+    }
+}
+
+// sherpa-onnx 자바 API 클래스를 모드 jar에 포함
+tasks.named('jar', Jar).configure {
+    from(zipTree('libs/sherpa-onnx-v1.13.3.jar')) {
+        include 'com/k2fsa/**'
     }
 }
