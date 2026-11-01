@@ -41,6 +41,15 @@ jobs:
             exit 1
           }
 
+      - name: Dump Minecraft API (debug)
+        if: always()
+        run: |
+          J=$(find build ~/.gradle -name "*.jar" 2>/dev/null | xargs -I{} sh -c 'unzip -l "{}" 2>/dev/null | grep -q "net/minecraft/advancements/DisplayInfo.class" && echo "{}"' | head -1)
+          echo "jar=$J"
+          for c in net.minecraft.advancements.DisplayInfo net.minecraft.advancements.AdvancementType; do
+            javap -cp "$J" -public $c | grep -v "^Compiled" | tr '\n' '|' | sed 's/%/%25/g' | sed 's/|/%0A/g' | sed "s/^/::warning title=api-$c::/"; echo
+          done
+
       - name: Show jar contents
         run: unzip -l build/libs/*.jar
 
