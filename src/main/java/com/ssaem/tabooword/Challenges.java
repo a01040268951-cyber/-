@@ -43,7 +43,7 @@ public final class Challenges {
             return false; // 탭의 첫 과제 (예: "Minecraft")
         }
         DisplayInfo display = holder.value().display().orElse(null);
-        return display != null && !display.isHidden() && display.getType() != AdvancementType.CHALLENGE;
+        return display != null && !display.hidden() && display.type() != AdvancementType.CHALLENGE;
     }
 
     private static List<AdvancementHolder> candidates(MinecraftServer server, List<ServerPlayer> players) {
@@ -75,7 +75,7 @@ public final class Challenges {
         DisplayInfo d = shared.value().display().orElseThrow();
         broadcast(server, prefix().append(Component.literal("모두의 도전과제: ").withStyle(ChatFormatting.WHITE))
                 .append(title(d)).append(Component.literal(" — 먼저 달성하는 사람이 승리!").withStyle(ChatFormatting.GRAY)));
-        broadcast(server, Component.literal("   ").append(d.getDescription().copy().withStyle(ChatFormatting.GRAY)));
+        broadcast(server, Component.literal("   ").append(d.description().copy().withStyle(ChatFormatting.GRAY)));
         for (ServerPlayer p : players) {
             showTitle(p, Component.literal("도전과제!").withStyle(ChatFormatting.GOLD), title(d));
         }
@@ -97,7 +97,7 @@ public final class Challenges {
             DisplayInfo d = pick.value().display().orElseThrow();
             broadcast(server, prefix().append(Component.literal(name(p) + ": ").withStyle(ChatFormatting.WHITE))
                     .append(title(d)).append(Component.literal(" — ").withStyle(ChatFormatting.GRAY))
-                    .append(d.getDescription().copy().withStyle(ChatFormatting.GRAY)));
+                    .append(d.description().copy().withStyle(ChatFormatting.GRAY)));
             showTitle(p, Component.literal("내 도전과제").withStyle(ChatFormatting.GOLD), title(d));
             count++;
         }
@@ -116,14 +116,14 @@ public final class Challenges {
         if (shared != null) {
             DisplayInfo d = shared.value().display().orElseThrow();
             lines.add(prefix().append(Component.literal("모두의 도전과제: ").withStyle(ChatFormatting.WHITE)).append(title(d))
-                    .append(Component.literal(" — ").withStyle(ChatFormatting.GRAY)).append(d.getDescription().copy().withStyle(ChatFormatting.GRAY)));
+                    .append(Component.literal(" — ").withStyle(ChatFormatting.GRAY)).append(d.description().copy().withStyle(ChatFormatting.GRAY)));
         }
         for (Map.Entry<UUID, AdvancementHolder> e : PER_PLAYER.entrySet()) {
             ServerPlayer p = server.getPlayerList().getPlayer(e.getKey());
             DisplayInfo d = e.getValue().value().display().orElseThrow();
             lines.add(prefix().append(Component.literal((p != null ? name(p) : "(나간 플레이어)") + ": ").withStyle(ChatFormatting.WHITE))
                     .append(title(d)).append(Component.literal(" — ").withStyle(ChatFormatting.GRAY))
-                    .append(d.getDescription().copy().withStyle(ChatFormatting.GRAY)));
+                    .append(d.description().copy().withStyle(ChatFormatting.GRAY)));
         }
         if (lines.isEmpty()) {
             lines.add(prefix().append(Component.literal("진행 중인 도전과제가 없어요. /taboo challenge 로 뽑으세요.").withStyle(ChatFormatting.GRAY)));
@@ -167,7 +167,7 @@ public final class Challenges {
     }
 
     private static MutableComponent title(DisplayInfo d) {
-        return d.getTitle().copy().withStyle(ChatFormatting.YELLOW);
+        return d.title().copy().withStyle(ChatFormatting.YELLOW);
     }
 
     private static String name(ServerPlayer p) {
